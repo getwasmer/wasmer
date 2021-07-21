@@ -150,7 +150,9 @@ This change is unlikely to affect any users of `wasmer`, but if it does please c
 - [#1969](https://github.com/wasmerio/wasmer/pull/1969) Added D integration to the README
 
 ### Changed
+
 - [#1979](https://github.com/wasmerio/wasmer/pull/1979) `WasmPtr::get_utf8_string` was renamed to `WasmPtr::get_utf8_str` and made `unsafe`.
+- [#1932](https://github.com/wasmerio/wasmer/pull/1932) Emscripten execution with `wasmer run` is now behind a flag: `--allow-emscripten` as our implementation of the Emscripten ABI is not fully sandboxed.
 
 ### Fixed
 - [#1979](https://github.com/wasmerio/wasmer/pull/1979) `WasmPtr::get_utf8_string` now returns a `String`, fixing a soundness issue in certain circumstances. The old functionality is available under a new `unsafe` function, `WasmPtr::get_utf8_str`.
