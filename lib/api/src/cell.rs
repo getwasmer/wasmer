@@ -2,7 +2,6 @@ pub use std::cell::Cell;
 
 use core::cmp::Ordering;
 use core::fmt::{self, Debug};
-use std::fmt::Pointer;
 
 /// A mutable Wasm-memory location.
 #[repr(transparent)]
@@ -121,10 +120,10 @@ impl<'a, T: Copy> WasmCell<'a, T> {
     }
 }
 
-impl<T: Debug> Debug for WasmCell<'_, T> {
+impl<T: Debug + Copy> Debug for WasmCell<'_, T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.inner.fmt(f)
+        write!(f, "WasmCell({:?})", self.inner.get())
     }
 }
 

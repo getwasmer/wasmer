@@ -4,6 +4,15 @@
 //! Data structure for representing WebAssembly modules in a
 //! `wasmer::Module`.
 
+use crate::entity::{EntityRef, PrimaryMap};
+#[cfg(feature = "enable-rkyv")]
+use crate::ArchivableIndexMap;
+use crate::{
+    CustomSectionIndex, DataIndex, ElemIndex, ExportIndex, ExportType, ExternType, FunctionIndex,
+    FunctionType, GlobalIndex, GlobalInit, GlobalType, ImportIndex, ImportType, LocalFunctionIndex,
+    LocalGlobalIndex, LocalMemoryIndex, LocalTableIndex, MemoryIndex, MemoryType, SignatureIndex,
+    TableIndex, TableInitializer, TableType,
+};
 use indexmap::IndexMap;
 use loupe::MemoryUsage;
 #[cfg(feature = "enable-rkyv")]
@@ -11,6 +20,7 @@ use rkyv::{
     de::SharedDeserializer, ser::Serializer, ser::SharedSerializer, Archive, Archived,
     Deserialize as RkyvDeserialize, Fallible, Serialize as RkyvSerialize,
 };
+#[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -19,15 +29,6 @@ use std::iter::ExactSizeIterator;
 use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::Arc;
-use wasmer_types::entity::{EntityRef, PrimaryMap};
-#[cfg(feature = "enable-rkyv")]
-use wasmer_types::ArchivableIndexMap;
-use wasmer_types::{
-    CustomSectionIndex, DataIndex, ElemIndex, ExportIndex, ExportType, ExternType, FunctionIndex,
-    FunctionType, GlobalIndex, GlobalInit, GlobalType, ImportIndex, ImportType, LocalFunctionIndex,
-    LocalGlobalIndex, LocalMemoryIndex, LocalTableIndex, MemoryIndex, MemoryType, SignatureIndex,
-    TableIndex, TableInitializer, TableType,
-};
 
 #[derive(Debug, Clone, MemoryUsage)]
 #[cfg_attr(
@@ -55,7 +56,8 @@ impl Default for ModuleId {
 
 /// A translated WebAssembly module, excluding the function bodies and
 /// memory initializers.
-#[derive(Debug, Clone, Serialize, Deserialize, MemoryUsage)]
+#[derive(Debug, Clone, Default, MemoryUsage)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct ModuleInfo {
     /// A unique identifier (within this process) for this module.
     ///
@@ -63,7 +65,7 @@ pub struct ModuleInfo {
     /// should be computed by the process.
     /// It's not skipped in rkyv, but that is okay, because even though it's skipped in bincode/serde
     /// it's still deserialized back as a garbage number, and later override from computed by the process
-    #[serde(skip_serializing, skip_deserializing)]
+    #[cfg_attr(feature = "enable-serde", serde(skip_serializing, skip_deserializing))]
     pub id: ModuleId,
 
     /// The name of this wasm module, often found in the wasm file.
@@ -280,29 +282,7 @@ impl Eq for ModuleInfo {}
 impl ModuleInfo {
     /// Allocates the module data structures.
     pub fn new() -> Self {
-        Self {
-            id: ModuleId::default(),
-            name: None,
-            imports: IndexMap::new(),
-            exports: IndexMap::new(),
-            start_function: None,
-            table_initializers: Vec::new(),
-            passive_elements: HashMap::new(),
-            passive_data: HashMap::new(),
-            global_initializers: PrimaryMap::new(),
-            function_names: HashMap::new(),
-            signatures: PrimaryMap::new(),
-            functions: PrimaryMap::new(),
-            tables: PrimaryMap::new(),
-            memories: PrimaryMap::new(),
-            globals: PrimaryMap::new(),
-            num_imported_functions: 0,
-            num_imported_tables: 0,
-            num_imported_memories: 0,
-            num_imported_globals: 0,
-            custom_sections: IndexMap::new(),
-            custom_sections_data: PrimaryMap::new(),
-        }
+        Default::default()
     }
 
     /// Get the given passive element, if it exists.
@@ -349,13 +329,10 @@ impl ModuleInfo {
             };
             ExportType::new(name, extern_type)
         });
-        ExportsIterator {
-            iter,
-            size: self.exports.len(),
-        }
+        ExportsIterator::new(iter, self.exports.len())
     }
 
-    /// Get the export types of the module
+    /// Get the import types of the module
     pub fn imports<'a>(&'a self) -> ImportsIterator<impl Iterator<Item = ImportType> + 'a> {
         let iter = self
             .imports
@@ -382,10 +359,7 @@ impl ModuleInfo {
                 };
                 ImportType::new(module, field, extern_type)
             });
-        ImportsIterator {
-            iter,
-            size: self.imports.len(),
-        }
+        ImportsIterator::new(iter, self.imports.len())
     }
 
     /// Get the custom sections of the module given a `name`.
@@ -508,6 +482,13 @@ pub struct ExportsIterator<I: Iterator<Item = ExportType> + Sized> {
     size: usize,
 }
 
+impl<I: Iterator<Item = ExportType> + Sized> ExportsIterator<I> {
+    /// Create a new `ExportsIterator` for a given iterator and size
+    pub fn new(iter: I, size: usize) -> Self {
+        Self { iter, size }
+    }
+}
+
 impl<I: Iterator<Item = ExportType> + Sized> ExactSizeIterator for ExportsIterator<I> {
     // We can easily calculate the remaining number of iterations.
     fn len(&self) -> usize {
@@ -558,6 +539,13 @@ impl<I: Iterator<Item = ExportType> + Sized> Iterator for ExportsIterator<I> {
 pub struct ImportsIterator<I: Iterator<Item = ImportType> + Sized> {
     iter: I,
     size: usize,
+}
+
+impl<I: Iterator<Item = ImportType> + Sized> ImportsIterator<I> {
+    /// Create a new `ImportsIterator` for a given iterator and size
+    pub fn new(iter: I, size: usize) -> Self {
+        Self { iter, size }
+    }
 }
 
 impl<I: Iterator<Item = ImportType> + Sized> ExactSizeIterator for ImportsIterator<I> {
